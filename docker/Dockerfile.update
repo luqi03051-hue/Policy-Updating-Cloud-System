@@ -1,0 +1,28 @@
+# ============================================================
+# Incremental image: reuse an existing image that already has PBC + charm built
+# (e.g. pv-lambda:latest), replace the project code, keep everything else.
+#
+#   docker build --provenance=false -f docker/Dockerfile.update \
+#       --build-arg BASE=pv-lambda:latest -t abe-lambda:poc2 .
+#
+# Check the base first:
+#   docker run --rm --entrypoint python pv-lambda:latest -c "import charm; print(charm.__file__)"
+# ============================================================
+ARG BASE=pv-lambda:latest
+FROM ${BASE}
+
+# Remove files of the previous PoC that no longer exist (old code must not linger in the image)
+RUN rm -rf /var/task/lambda_encrypt.py /var/task/abe_project_local_client_and_lambda.py \
+           /var/task/crypto_core.py /var/task/tests
+
+# Test tooling (pytest, moto) for running the suite inside the image
+COPY requirements-dev.txt /tmp/requirements-dev.txt
+RUN python3 -m pip install -q -r /tmp/requirements-dev.txt
+
+COPY crypto/abe_core.py crypto/hybrid.py crypto/object_store.py \
+     crypto/ta_local.py crypto/owner_encrypt.py crypto/owner_upkeygen.py \
+     crypto/cloud_update.py crypto/client_decrypt.py crypto/app.py \
+     /var/task/
+COPY tests /var/task/tests
+
+CMD ["app.handler"]
